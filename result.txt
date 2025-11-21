@@ -1,0 +1,287 @@
+ Información Monetaria y Financiera Mensual
+ Comunicado N° 39.360
+
+Situación monetaria (diciembre de 2000)
+
+Considerando cifras promedio, en diciembre de 2000 los depósitos totales disminuyeron $290 millones (0,4%)
+como consecuencia del comportamiento de los depósitos del sector público, ya que las colocaciones del sector
+privado se mantuvieron prácticamente en los niveles del mes anterior.
+
+Es importante aclarar que si bien el promedio de depósitos privados se mantuvo invariable, ello fue consecuencia
+del efecto arrastre negativo de noviembre, ya que en diciembre aumentaron casi $900 millones (1,1%),
+principalmente debido al comportamiento de las colocaciones en pesos vinculadas a las transacciones de la
+economía. Relacionado con ello, los medios de pago del sector privado (circulante en poder del público, depósitos
+en cuenta corriente y en caja de ahorros, todos denominados en pesos) aumentaron casi $1.000 millones (4,1%)
+respecto al promedio de noviembre.
+
+Las reservas internacionales del sistema financiero se incrementaron en promedio $440 millones, debido al
+aumento en la circulación monetaria, ya que la integración de requisitos de liquidez cayó $ 370 millones (2%). Con
+respecto a este último punto, cabe señalar que si bien las regulaciones vigentes permitían en diciembre una menor
+integración respecto a la exigencia de ese mes de hasta 20%, a compensar en enero, el sistema en su conjunto sólo
+dejó de integrar un 4%.
+
+En cuanto a las tasas de interés domésticas, en general aumentaron hasta mediados de diciembre, para finalizar el
+mes en niveles levemente superiores a los del fin del mes anterior. El cambio en el comportamiento en las tasas de
+interés estuvo asociado a la culminación de las gestiones para el armado del paquete de apoyo financiero.
+
+Bancos Privados (datos a octubre de 2000)
+
+El grupo de bancos privados registró una caída de 0,8% de los activos totales durante octubre de 2000, debido
+principalmente a la disminución de 0,8% de los préstamos totales y en segundo lugar a la caída de las
+disponibilidades (3,3%). En cuanto a las fuentes alternativas de fondeo, las obligaciones negociables registraron un
+aumento de 5,3%, mientras que las líneas de préstamos provenientes del exterior disminuyeron 10,4% y retornaron
+a los niveles de agosto de 2000.
+
+En el primer mes del cuarto trimestre de 2000, los bancos privados registraron ganancias equivalentes a 0,6% del
+patrimonio neto en términos anualizados. La disminución de los beneficios obtenidos en octubre respecto al mes
+anterior se debió particularmente a los menores resultados generados por la tenencia de activos financieros. Se
+destaca que la disminución obser vada en los gastos administrativos compensó parcialmente la caída de los ingresos
+netos por activos, que por su parte registraron su nivel más bajo del año.
+
+Debido a modificaciones en el Régimen Informativo Mensual, la información de calidad de cartera no se encuentra
+disponible a la fecha.
+
+En octubre de 2000, la exigencia de capital total de los bancos privados aumentó 3,0%, explicado casi en su totalidad
+por el incremento en la exigencia de capital por riesgo de crédito (3,4%). Esto último se debió principalmente al
+aumento de los activos de riesgo, que a su vez subieron como consecuencia del incremento de los préstamos
+durante septiembre de 2000. La integración de capital disminuyó 1,0% en el período analizado, obser vándose caídas
+tanto en el patrimonio neto básico como en el complementario. El aumento de la exigencia y la caída de la
+integración de capital provocaron una disminución en el exceso de integración, que en términos de la exigencia de
+capital total pasó de 56,8% a 50,7%. En último lugar, la integración de capital en términos de los activos ponderados
+según Basilea cayó 0,8 puntos porcentuales, ubicándose en un nivel (20,4%) muy superior a lo establecido por la
+regulación local y por los estándares mínimos internacionales.
+
+Se adjuntan cuadros con la evolución de las principales variables. INFORMACION MONETARIA Y FINANCIERA MENSUAL
+ Banco Central de la República Argentina
+ Gerencia de Análisis Económico e Información
+ Diciembre de 2000
+ Principales Variables Monetarias
+ - Promedio mensual de saldos diarios -
+
+ Diciembre Noviembre Octubre año 2000 12 mesesVariación Variación
+
+ en millones de pesos en porcentaje
+
+ Sistema Financiero (1)
+
+ Reservas internacionales del sistema financiero (2) 32.743 32.263 34.271 -2,4 -2,4
+ Liquidez internacional total (3) 38.174 37.735 39.585 -3,5 -3,5
+ Liquidez internacional total / M3* 40,0% 39,7% 41,2%
+
+ M3* (4) 95.381 95.167 96.144 3,8 3,8
+ M1 (5) 21.006 20.261 20.763 -1,6 -1,6
+
+ Banco Central
+
+ Reservas internacionales netas (6) 25.391 24.716 26.316 -3,7 -3,7
+ En oro, divisas y colocaciones a plazo netas (7) 24.077 23.443 24.985 -3,3 -3,3
+
+ Pasivos financieros 23.541 23.037 24.556 -5,1 -5,1
+ Circulación monetaria 14.205 13.588 13.718 -5,6 -5,6
+ En poder del público 11.889 11.382 11.541 -4,0 -4,0
+ En entidades financieras 2.316 2.206 2.177 -13,0 -13,0
+ Depósitos en cuenta corriente 88 69 74 -3,0 -3,0
+ Posición neta de pases 9.248 9.380 10.763 -4,3 -4,3
+ Pases pasivos 9.318 9.497 10.801 -6,9 -6,9
+ Pases activos 71 117 38 -79,4 -79,4
+
+ Respaldo de los pasivos financieros con reservas
+ en oro y divisas 102,3% 101,8% 101,7%
+
+ Entidades Financieras
+
+ Integración de requisitos de liquidez en el exterior 7.352 7.547 7.955 2,2 2,2
+ Efectivo en moneda extranjera 770 697 728 -20,2 -20,2
+
+ Préstamos (8) 77.846 76.655 76.256 0,2 0,2
+ Al sector privado no financiero 62.759 62.688 62.908 -4,9 -4,9
+ En moneda nacional 23.504 23.455 23.608 -4,7 -4,7
+ En moneda extranjera 39.254 39.233 39.300 -5,0 -5,0
+ Al sector público 15.087 13.968 13.348 29,3 29,3
+ Préstamos más certificados de participación en fideicomisos 79.865 78.674 78.275 0,8 0,8
+
+ Depósitos (9) 83.492 83.785 84.603 5,0 5,0
+ En moneda nacional 31.792 31.933 32.828 -3,6 -3,6
+ Cuenta corriente 9.117 8.879 9.222 1,8 1,8
+ Caja de ahorros 7.904 7.730 7.904 -5,7 -5,7
+ Plazo fijo 12.022 12.704 13.207 -6,0 -6,0
+ Otros 2.750 2.619 2.495 -3,3 -3,3
+ En moneda extranjera 51.699 51.852 51.775 11,0 11,0
+ Cuenta corriente 775 723 729 -6,5 -6,5
+ Caja de ahorros 5.608 5.566 5.496 -8,8 -8,8
+ Plazo fijo 44.151 44.404 44.541 14,7 14,7
+ Otros 1.165 1.159 1.009 7,5 7,5
+
+ Integración de requisitos de liquidez total (10) 16.670 17.044 18.756 -3,1 -3,1
+ Integración de requisitos de liquidez / Depósitos 20,0% 20,3% 22,2%
+Nota: los datos de préstamos, depósitos y efectivo surgen del SISCEN. La última cifra disponible para la serie de préstamos corres ponde al 25 de
+diciembre de 2000.
+(1) Comprende el Banco Central y las entidades financieras.
+(2) Reservas internacionales netas del Banco Central más integración de requisitos de liquidez de las entidades financieras en el exterior.
+(3) Reservas internacionales del sistema financiero menos el saldo de títulos públicos en dólares en poder del Banco Central más el programa con-
+tingente de pases.
+(4) Circulante en poder del público más depósitos totales bimonetarios.
+(5) Circulante en poder del público más depósitos en cuenta corriente en pesos.
+(6) Neto de las divisas mantenidas como contrapartida de los depósitos del Gobierno. Incluye el saldo de títulos públicos denominados en dólares y de
+activos externos afectados a operaciones de pase pasivo con las entidades financieras.
+(7) Reservas internacionales netas menos el saldo de títulos públicos en dólares.
+(8) No incluyen recursos devengados, operaciones con títulos públicos, préstamos a residentes en el exterior ni aquéllos que fueron transferidos a fi-
+deicomisos financieros.
+(9) No incluyen recursos devengados ni operaciones con títulos públicos.
+(10) Pases pasivos para el Banco Central más integración de requisitos de liquidez en el exterior.
+Tipo de cambio: 1 peso = 1 dólar estadounidense. Tasas de Interés
+ - En % nominal anual -
+
+ 28 de Promedio mensual
+ Diciembre Diciembre Noviembre atrás 1999 atrás3 meses Diciembre Un año
+
+ Mercado Local
+
+ Préstamos entre entidades financieras
+ En moneda nacional 12,12 13,35 11,06 8,24 8,50 8,50
+ En moneda extranjera 11,18 11,39 8,19 7,86 7,60 7,60
+
+ BAIBOR a 90 días
+ En moneda nacional 15,50 16,92 15,71 9,90 13,90 13,90
+ En moneda extranjera 13,13 13,10 10,89 8,83 9,52 9,52
+
+ Préstamos a empresas de primera línea (1)
+ En moneda nacional 14,80 16,84 15,33 9,98 13,45 13,45
+ En moneda extranjera 13,19 13,88 11,91 9,38 10,05 10,05
+
+ Depósitos en caja de ahorros
+ En moneda nacional 2,54 2,78 2,77 2,68 3,13 3,13
+ En moneda extranjera 3,19 3,02 2,66 2,61 2,95 2,95
+
+ Depósitos a plazo fijo (2)
+ En moneda nacional 12,00 14,32 12,30 8,28 11,46 11,46
+ En moneda extranjera 10,37 11,72 10,19 7,83 8,27 8,27
+
+ Mercado Internacional
+
+ LIBOR US$ 3 meses 6,40 6,54 6,75 6,67 6,34 6,34
+ US Treasury 1 año 5,42 5,63 6,16 6,13 5,84 5,84
+ US Treasury 30 años 5,46 5,48 5,77 5,82 6,36 6,36
+
+ Indicadores del Mercado de Capitales
+ - Fin de mes -
+
+ Diciembre atrás atrás 1999 atrásUn mes 3 meses 31 Dic. Un año
+
+ Indice Merval 417 399 475 550 550
+ Indice Burcap 735 719 846 995 995
+ Indice de Bancos (3) 515 489 552 785 785
+
+ Precio Bonos Brady
+ Par 69,0 65,3 67,8 65,8 65,8
+ FRB 90,8 87,8 91,3 90,3 90,3
+ Discount 76,0 73,9 80,0 79,0 79,0
+
+ Riesgo soberano - en puntos básicos - (4) 773 879 675 533 533
+ Riesgo cambiario - en puntos básicos - (5) 158 214 120 283 283
+
+(1) A 30 días,
+(2) Corresponde a plazos fijos por montos de un millón de pesos o más, por depósitos entre 30 y 35 días.
+(3) El Índice de Bancos es un índice de capitalización construido con la misma metodología que el Burcap. Incluye las acciones de los bancos: Galicia,
+ Francés, Bansud, Supervielle, Suquía, Hipotecario y Río de la Plata.
+(4) La prima de riesgo soberano está medida por el Spread del índice EMBI+ Argentina.
+(5) El riesgo cambiario está medido como la diferencia entre el rendimento de los Bonos de Consolidación (BOCONES) Pro1 en pesos y Pro 2 en
+ dólares, los cuales permiten separar la exposición de la moneda local al tener similar duration y riesgo de tasa de interés, e idéntico riesgo soberano.
+ Fuente: Ministerio de Economía. Bancos Privados (1)
+
+ Dic 98 Dic 99 Sep 00 Oct 00 Oct 00 Oct 99 Oct 00Set 00 / Dic 98 / Dic 99 /
+
+ I. Situación Patrimonial en millones de pesos en %
+
+ ACTIVO 100.202 108.784 125.348 124.292 -0,8 15,9 14,3
+ Disponibilidades 5.779 5.608 6.078 5.878 -3,3 13,4 4,8
+ Títulos Públicos 9.406 11.100 10.706 10.538 -1,6 26,5 -5,1
+ Títulos Privados 486 410 563 520 -7,5 -39,8 26,9
+ Préstamos 53.826 56.916 56.203 55.746 -0,8 5,5 -2,1
+ Al sector público 4.173 6.389 7.256 6.813 -6,1 38,1 6,6
+ Al sector financiero 2.443 2.823 2.936 2.977 1,4 8,2 5,5
+ Al sector privado no financiero 47.209 47.705 46.011 45.956 -0,1 2,5 -3,7
+ Adelantos 10.609 9.617 8.159 8.108 -0,6 -5,6 -15,7
+ Documentos 12.133 11.399 11.402 11.328 -0,6 -7,1 -0,6
+ Hipotecarios 6.864 10.579 10.891 11.100 1,9 52,8 4,9
+ Prendarios 3.218 2.933 2.575 2.560 -0,6 -6,6 -12,7
+ Tarjetas de crédito 3.154 3.230 3.307 3.382 2,3 1,5 4,7Personales 3.661 3.201 3.193 3.254 1,9 -11,8 1,7
+ Previsiones sobre préstamos -2.483 -3.119 -3.348 -3.442 2,8 24,4 10,4
+ Otros créditos por intermediación financiera (2) 25.485 30.284 47.285 47.108 -0,4 42,0 55,6
+ Otros activos 7.703 7.584 7.862 7.944 1,0 -2,6 4,7
+ PASIVO 90.285 96.475 113.112 112.163 -0,8 14,9 16,3
+ Depósitos 51.934 54.447 58.401 57.876 -0,9 6,4 6,3
+ Cuenta corriente 6.325 6.024 5.368 5.276 -1,7 -11,7 -12,4
+ Caja de ahorros 9.936 9.787 9.493 9.381 -1,2 -0,4 -4,2
+ Plazo fijo e inversiones a plazo 33.680 36.187 41.122 40.869 -0,6 11,7 12,9
+ Otras obligaciones por intermediación financiera 35.881 39.046 51.509 51.123 -0,7 26,9 30,9Obligaciones interfinancieras 2.075 2.146 2.551 2.702 5,9 8,7 25,9
+ Obligaciones con el BCRA 359 274 100 95 -4,4 -19,7 -65,2
+ Obligaciones negociables 4.061 4.990 5.158 5.431 5,3 23,4 8,8
+ Líneas de préstamos con el exterior 6.478 6.680 5.093 4.564 -10,4 -6,2 -31,7
+ Obligaciones subordinadas 1.318 1.683 1.779 1.769 -0,6 24,1 5,1
+ Otros pasivos 1.152 1.299 1.423 1.394 -2,0 12,3 7,3
+ PATRIMONIO NETO 9.917 12.309 12.236 12.129 -0,9 25,3 -1,5
+
+ II. Rentabilidad en millones de pesos
+ Resultado por intereses 3.568 3.819 302 289 - 3.236 3.013
+ Resultado por servicios 2.500 2.598 227 203 - 2.139 2.129
+ Resultado por activos 592 908 120 53 - 704 1.023
+ Gastos de administración -5.038 -5.326 -473 -417 - -4.371 -4.388
+ Cargos por incobrabilidad -1.372 -1.872 -190 -176 - -1.423 -1.957
+ Cargas impositivas -314 -368 -33 -28 - -303 -316
+ Impuesto a las ganancias -269 -386 -14 6 - -328 -337
+ Diversos y otros 730 896 96 77 - 780 772
+ RESULTADO TOTAL 398 269 34 6 - 434 -61
+ III. Financiaciones y Calidad de la Cartera Crediticia (3) en millones de pesos en %
+
+ Financiaciones 56.627 60.602 59.933 s/i - 6,3 -
+ Cartera irregular 3.835 4.631 5.066 s/i - 23,9 -
+ Cartera irrecuperable 1.083 1.627 1.726 s/i - 42,0 -
+ Previsiones sobre financiaciones 2.526 3.212 3.465 s/i - 25,9 -
+
+ IV. Capitales Mínimos en millones de pesos en %
+
+ Activos brutos 115.140 119.928 117.968 121.098 2,7 1,4 1,0
+ Activos ponderados por riesgo 68.839 64.759 61.584 63.472 3,1 -5,2 -2,0
+ Exigencia de capital por riesgo de crédito y tasa de interés 8.026 7.714 7.423 7.663 3,2 -3,3 -0,7
+ Exigencia de capital por riesgo de crédito según Basilea 4.748 4.697 4.480 4.611 2,9 -1,3 -1,8
+ Exigencia de capital por riesgo de mercado 65 69 104 104 0,0 19,9 50,7
+ Exigencia de capital final (4) 8.095 7.864 7.601 7.830 3,0 -2,1 -0,4
+ Integración de capital 10.081 12.233 11.922 11.801 -1,0 22,4 -3,5
+ Patrimonio neto básico y complementario 11.445 13.805 13.794 13.671 -0,9 21,1 -1,0
+ Cuentas deducibles y otros factores de descuento -1.364 -1.572 -1.873 -1.870 -0,2 11,7 19,0
+ Variación del precio de los activos financieros -8 32 3 -22 -833,3 -377,6 -168,8
+ Exceso de integración final 1.987 4.369 4.321 3.971 -8,1 122,1 -9,1
+ V. Datos Físicos en miles en %
+
+ Personal ocupado 65,8 61,8 60,7 60,7 - -5,0 -1,8
+ Cuentas corrientes 2.139 2.382 2.653 2.653 - 8,3 11,4
+ Cajas de ahorros 9.088 10.164 10.554 10.554 - 9,9 3,8
+ Depósitos a plazo fijo 1.217 1.260 1.403 1.403 - 5,1 11,3
+
+(1) Datos del Régimen Informativo Mensual, sujetos a revisión. Excepto el item V, que corresponde al Régimen Informativo Trimestral a partir de la
+información de octubre de 2000 (Com. “A” 3147).
+(2) Incluye la tenencia -computable para la integración de requisitos de liquidez- de certificados de depósitos adquiridos por el Banco Central a bancos
+del exterior, cuya titularidad haya sido transferida a la entidad por la concertación de pases activos con el Banco Central.
+(3) Todas las cifras de este item no incluyen las financiaciones irrecuperables que se deducen del activo y se contabilizan en cuentas de orden (Com.
+"A" 2357). Las cifras de la cartera irregular incluyen la de la cartera irrecuperable.
+(4) Comprende exigencia por riesgo de crédito y tasa de interés, exigencia por riesgo de mercado, exigencia adicional por defecto de colocación de
+deuda y exigencia adicional por función de custodia y/o agente de registro.
+
+Notas:
+1) Las cifras de los items I, III, IV y V presentadas en las tres últimas columnas corresponden a la variación porcentual del nivel de las variables para el
+período correpondiente.
+2) Las cifras del item II presentadas en las dos primeras columnas corresponden al flujo acumulado en los años 1998 y 1999, para las dos columnas si-
+guientes al flujo mensual y para las dos últimas columnas al flujo acumulado en el período correspondiente. Evolución de las Principales Variables del Mercado Financiero
+
+ Depósitos Totales y Préstamos al Sector Reser vas Internacionales
+ Privado No Financiero del Sistema Financiero
+
+ Riesgo Soberano
+ Tasas de Interés Spread del índice EMBI+ Argentina
+
+ Solvencia Rentabilidad
+ Bancos Privados Bancos Privados
+
+Margen por Intermediación y Eficiencia Irregularidad de Cartera
+ Bancos Privados Bancos Privados

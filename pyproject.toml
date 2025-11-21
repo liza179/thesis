@@ -1,0 +1,13 @@
+[project]
+name = "thesis"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "langchain-text-splitters>=1.0.0",
+    "model2vec>=0.7.0",
+    "pypdf>=6.3.0",
+    "sentence-transformers>=5.1.2",
+    "tqdm>=4.67.1",
+]
