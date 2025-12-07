@@ -18,13 +18,17 @@ def remove_consecutive_whitespace(text):
 
 def main():
     pdf_files = glob.glob("monthly_reports/*.pdf")
+    pdf_files = [f for f in pdf_files if "bol" in f.lower()][75:]
     for pdf_path in tqdm(pdf_files):
-        filename = os.path.splitext(os.path.basename(pdf_path))[0]
-        text = extract_text_from_pdf(pdf_path)
-        text = remove_consecutive_whitespace(text)
-        out_path = f"parsed/{filename}.txt"
-        with open(out_path, "w") as f:
-            f.write(text)
+        try:
+            filename = os.path.splitext(os.path.basename(pdf_path))[0]
+            text = extract_text_from_pdf(pdf_path)
+            text = remove_consecutive_whitespace(text)
+            out_path = f"parsed/{filename}.txt"
+            with open(out_path, "w") as f:
+                f.write(text)
+        except Exception as e:
+            print(f"Error processing {pdf_path}: {e}")
 
 if __name__ == "__main__":
     main()
