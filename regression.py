@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from statsmodels.tsa.filters.hp_filter import hpfilter
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, BayesianRidge
 from sklearn.preprocessing import StandardScaler, PowerTransformer, QuantileTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
@@ -161,18 +161,13 @@ def bootstrap_metrics(y_true, y_pred, n_bootstrap=1000, random_state=42):
     }
 
 
-def train_ridge(df, alpha=10.0, target='cpi_log_return', test_size=0.2, random_state=42,
-                clip_x_percentiles=(2, 98), clip_y_percentiles=(10, 90), clip_residuals=False,
-                transformer='standard', n_bootstrap=1000):
+def train_model(df, model_type='ridge', alpha=10.0, target='cpi_log_return', test_size=0.2, random_state=42,
+                clip_y_percentiles=(10, 90), clip_residuals=False,
+                transformer='standard', target_transformer=None, n_bootstrap=1000):
     feature_cols = [col for col in df.columns if col not in ['date', target, 'cpi_yoy', 'cpi_yoy_raw',
                     'policy_rate_raw', 'market_rate_raw', 'rem_12_raw', 'emae_index']]
 
     df_clean = df.dropna(subset=feature_cols + [target]).copy()
-
-    if clip_x_percentiles:
-        for col in feature_cols:
-            p_low, p_high = np.percentile(df_clean[col], clip_x_percentiles)
-            df_clean[col] = df_clean[col].clip(p_low, p_high)
 
     X = df_clean[feature_cols]
     y = df_clean[target]
@@ -200,11 +195,31 @@ def train_ridge(df, alpha=10.0, target='cpi_log_return', test_size=0.2, random_s
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    model = Ridge(alpha=alpha)
-    model.fit(X_train_scaled, y_train_clipped)
+    if target_transformer == 'bayesian_quantile':
+        y_scaler = BayesianQuantileTransformer()
+        y_train_clipped_transformed = y_scaler.fit_transform(y_train_clipped.values.reshape(-1, 1)).ravel()
+    elif target_transformer == 'power':
+        y_scaler = PowerTransformer(method='yeo-johnson', standardize=True)
+        y_train_clipped_transformed = y_scaler.fit_transform(y_train_clipped.values.reshape(-1, 1)).ravel()
+    else:
+        y_scaler = None
+        y_train_clipped_transformed = y_train_clipped
+
+    if model_type == 'ridge':
+        model = Ridge(alpha=alpha)
+    elif model_type == 'bayesian_ridge':
+        model = BayesianRidge()
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}")
+
+    model.fit(X_train_scaled, y_train_clipped_transformed)
 
     y_train_pred_raw = model.predict(X_train_scaled)
     y_test_pred_raw = model.predict(X_test_scaled)
+
+    if y_scaler:
+        y_train_pred_raw = y_scaler.inverse_transform(y_train_pred_raw.reshape(-1, 1)).ravel()
+        y_test_pred_raw = y_scaler.inverse_transform(y_test_pred_raw.reshape(-1, 1)).ravel()
 
     if clip_residuals:
         train_residuals = y_train - y_train_pred_raw
@@ -245,20 +260,15 @@ if __name__ == "__main__":
     console = Console()
 
     ablations = [
-        ('Full model', {'transformer': 'bayesian_quantile', 'alpha': 10.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': (10, 90)}),
-        ('→ Sklearn quantile', {'transformer': 'quantile_normal', 'alpha': 10.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': (10, 90)}),
-        ('→ No quantile', {'transformer': 'standard', 'alpha': 10.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': (10, 90)}),
-        ('→ Lower alpha (1.0)', {'transformer': 'bayesian_quantile', 'alpha': 1.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': (10, 90)}),
-        ('→ No y clipping', {'transformer': 'bayesian_quantile', 'alpha': 10.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': None}),
-        ('→ No x clipping', {'transformer': 'bayesian_quantile', 'alpha': 10.0, 'clip_x_percentiles': None, 'clip_y_percentiles': (10, 90)}),
+        ('Full model', {'model_type': 'bayesian_ridge', 'transformer': 'bayesian_quantile', 'clip_y_percentiles': (10, 90)}),
+        ('→ Ridge (α=1e-6)', {'model_type': 'ridge', 'transformer': 'bayesian_quantile', 'alpha': 1e-6, 'clip_y_percentiles': (10, 90)}),
+        ('→ No quantile', {'model_type': 'bayesian_ridge', 'transformer': 'standard', 'clip_y_percentiles': (10, 90)}),
+        ('→ No y clipping', {'model_type': 'bayesian_ridge', 'transformer': 'bayesian_quantile', 'clip_y_percentiles': None}),
     ]
 
     results_list = []
     for name, params in ablations:
-        if params['clip_x_percentiles'] is None:
-            results = train_ridge(df, **{k: v for k, v in params.items() if k != 'clip_x_percentiles'})
-        else:
-            results = train_ridge(df, **params)
+        results = train_model(df, **params)
         results_list.append((name, results))
 
     table = Table(title="Ablation Study", show_header=True, header_style="bold magenta")
