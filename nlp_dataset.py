@@ -110,10 +110,11 @@ def create_nlp_dataset(
     csv_path: str = "merged_data.csv",
     doc_dir: str = "translated",
     n_months: int = 6,
-    min_before: int = 12,
-    max_before: int = 24,
+    min_before: int = 1,
+    max_before: int = 12,
     start_date: str = "2016-01-31"
 ) -> pd.DataFrame:
+    print(f"Creating NLP dataset with {n_months} months lookback, min_before={min_before}, max_before={max_before}")
     print(f"Loading documents from {doc_dir}...")
     doc_dict = load_documents(doc_dir)
 

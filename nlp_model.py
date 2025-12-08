@@ -8,6 +8,8 @@ The model output (nlp_pred) is then used as a feature in the final ensemble.
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import Ridge, BayesianRidge
+from sklearn.cross_decomposition import PLSRegression, CCA
+from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics import r2_score
 from rich.console import Console
 from rich.table import Table
@@ -29,14 +31,14 @@ def embed_documents(df_nlp, model=None, cache_file='.embedding_cache.pkl', verbo
         verbose: Show progress bar
 
     Returns:
-        DataFrame with added 'doc_embeddings' column (List of 512-dim arrays)
+        Tuple of (DataFrame with added 'doc_embeddings' column, embedding_cache dict mapping date -> embedding)
 
     Note:
         Uses persistent disk cache in vector.py to avoid re-embedding.
     """
     if model is None:
         print("Loading BGE-M3 model...")
-        model = get_model(static=False)
+        model = get_model(static=True)
 
     df_nlp = df_nlp.copy()
 
@@ -66,48 +68,130 @@ def embed_documents(df_nlp, model=None, cache_file='.embedding_cache.pkl', verbo
         doc_embeddings_list.append(embeddings)
 
     df_nlp['doc_embeddings'] = doc_embeddings_list
-    return df_nlp
+    return df_nlp, embedding_cache
 
 
-def aggregate_embeddings(doc_embeddings, method='ema', ema_half_life=5):
+def extract_embedding_pairs(embedding_cache, max_dt=6, verbose=False):
+    """
+    Extract (embedding[t], embedding[t+dt]) pairs from embedding cache in chronological order.
+    Creates pairs for dt in 1...max_dt.
+    
+    Args:
+        embedding_cache: Dict mapping date -> embedding (512-dim array)
+        max_dt: Maximum time step difference (default 6)
+        verbose: Print debug info
+        
+    Returns:
+        X_pairs: Array of shape (n_pairs, 512) - embedding[t]
+        Y_pairs: Array of shape (n_pairs, 512) - embedding[t+dt]
+    """
+    sorted_dates = sorted(embedding_cache.keys())
+    
+    if verbose:
+        print(f"Debug extract_embedding_pairs: {len(sorted_dates)} dates in cache")
+        if sorted_dates:
+            print(f"Debug: Date range: {sorted_dates[0]} to {sorted_dates[-1]}")
+    
+    if len(sorted_dates) < max_dt + 1:
+        if verbose:
+            print(f"Debug: Not enough dates ({len(sorted_dates)}), need at least {max_dt + 1}, returning empty arrays")
+        return np.array([]).reshape(0, 512), np.array([]).reshape(0, 512)
+    
+    X_pairs = []
+    Y_pairs = []
+    
+    for dt in range(1, max_dt + 1):
+        for i in range(len(sorted_dates) - dt):
+            X_pairs.append(embedding_cache[sorted_dates[i]])
+            Y_pairs.append(embedding_cache[sorted_dates[i + dt]])
+    
+    result_X = np.array(X_pairs)
+    result_Y = np.array(Y_pairs)
+    
+    if verbose:
+        print(f"Debug: Created {len(X_pairs)} pairs (dt=1..{max_dt}), shapes: X={result_X.shape}, Y={result_Y.shape}")
+    
+    return result_X, result_Y
+
+
+def train_cca_projection(embedding_cache, n_components=50, max_dt=6, verbose=True):
+    """
+    Train CCA projection on (embedding[t], embedding[t+dt]) pairs from cache.
+    Creates pairs for dt in 1...max_dt.
+    
+    Args:
+        embedding_cache: Dict mapping date -> embedding
+        n_components: Number of CCA components to use
+        max_dt: Maximum time step difference (default 6)
+        verbose: Print info
+        
+    Returns:
+        CCA model fitted on the pairs
+    """
+    if verbose:
+        print(f"Extracting embedding pairs for CCA from cache (chronological order, dt=1..{max_dt})...")
+    
+    X_pairs, Y_pairs = extract_embedding_pairs(embedding_cache, max_dt=max_dt, verbose=verbose)
+    
+    assert len(X_pairs) > 0, f"No embedding pairs found in cache (need at least 2 dates). Cache has {len(embedding_cache)} dates."
+    assert X_pairs.ndim == 2, f"X_pairs should be 2D, got shape {X_pairs.shape}"
+    assert Y_pairs.ndim == 2, f"Y_pairs should be 2D, got shape {Y_pairs.shape}"
+    
+    if verbose:
+        print(f"Found {len(X_pairs)} embedding pairs")
+        print(f"Training CCA with {n_components} components...")
+    
+    n_components = min(n_components, len(X_pairs), X_pairs.shape[1])
+    cca = CCA(n_components=n_components, scale=False)
+    cca.fit(X_pairs, Y_pairs)
+    
+    if verbose:
+        print(f"CCA correlation: {cca.score(X_pairs, Y_pairs):.4f}")
+    
+    return cca
+
+
+def aggregate_embeddings(doc_embeddings, method='concat', max_docs=None, projection=None):
     """
     Aggregate multiple document embeddings into a single vector.
 
     Args:
         doc_embeddings: List of embedding arrays (each 512-dim)
-        method: 'ema' for exponential moving average
-        ema_half_life: Number of documents for weight to decay by half
+        method: 'concat' to concatenate all embeddings
+        max_docs: Maximum number of documents (for padding). If None, uses length of doc_embeddings.
+        projection: Optional CCA projection to apply before concatenation
 
     Returns:
-        Single aggregated embedding (512-dim array)
-
-    EMA logic:
-        - For 6 docs: oldest doc has weight = 0.5 × newest doc weight
-        - decay_factor = 0.5^(1/5), so weight[0] = decay_factor^5 = 0.5
-        - If fewer docs: renormalize weights to sum to 1
+        Concatenated embedding vector (max_docs * projected_dim or max_docs * 512-dim array, padded with zeros if needed)
     """
     if len(doc_embeddings) == 0:
-        # Return zero vector if no documents
-        return np.zeros(512)
+        if max_docs is None:
+            max_docs = 0
+        if projection is not None:
+            dim = projection.n_components
+        else:
+            dim = 512
+        return np.zeros(max_docs * dim)
 
-    if method == 'ema':
-        n_docs = len(doc_embeddings)
-
-        # Calculate decay factor: weight[0] = 0.5 * weight[n-1]
-        # decay_factor^(n-1) = 0.5
-        decay_factor = 0.5 ** (1 / ema_half_life)
-
-        # Generate weights from oldest to newest
-        weights = np.array([decay_factor ** (n_docs - 1 - i) for i in range(n_docs)])
-
-        # Normalize to sum to 1
-        weights = weights / weights.sum()
-
-        # Weighted average
+    if method == 'concat':
+        if max_docs is None:
+            max_docs = len(doc_embeddings)
+        
         embeddings_array = np.stack(doc_embeddings, axis=0)  # shape: (n_docs, 512)
-        aggregated = np.average(embeddings_array, axis=0, weights=weights)
-
-        return aggregated
+        
+        if projection is not None:
+            embeddings_array = projection.transform(embeddings_array)  # shape: (n_docs, n_components)
+            dim = projection.n_components
+        else:
+            dim = 512
+        
+        concatenated = embeddings_array.flatten()  # shape: (n_docs * dim,)
+        
+        if len(doc_embeddings) < max_docs:
+            padding = np.zeros((max_docs - len(doc_embeddings)) * dim)
+            concatenated = np.concatenate([concatenated, padding])
+        
+        return concatenated
     else:
         raise ValueError(f"Unknown aggregation method: {method}")
 
@@ -115,8 +199,12 @@ def aggregate_embeddings(doc_embeddings, method='ema', ema_half_life=5):
 def train_nlp_model(
     df_nlp,
     df_regression,
+    embedding_cache=None,
     model_type='ridge',
     ridge_alpha=1.0,
+    pls_n_components=1,
+    use_cca=False,
+    cca_components=50,
     verbose=True
 ):
     """
@@ -125,8 +213,12 @@ def train_nlp_model(
     Args:
         df_nlp: DataFrame with 'doc_embeddings' column
         df_regression: DataFrame with 'target' column (from reconstruct_model_data)
-        model_type: 'ridge' or 'bayesian_ridge'
+        embedding_cache: Dict mapping date -> embedding (required if use_cca=True)
+        model_type: 'ridge', 'bayesian_ridge', or 'pls'
         ridge_alpha: Ridge regularization strength (only for model_type='ridge')
+        pls_n_components: Number of components for PLSRegression (only for model_type='pls')
+        use_cca: If True, apply CCA projection learned from (embedding[t] -> embedding[t+1]) pairs
+        cca_components: Number of CCA components to use
         verbose: Print training info
 
     Returns:
@@ -150,26 +242,67 @@ def train_nlp_model(
         print(f"Date range: {df_merged['date'].min().date()} to {df_merged['date'].max().date()}")
         print(f"Documents coverage: {df_merged['n_docs_found'].mean():.2f} avg docs per row")
 
+    # Aggregate embeddings for each row (before CCA, to determine split)
+    max_docs = max(len(row['doc_embeddings']) for _, row in df_merged.iterrows())
+    if verbose:
+        print(f"Maximum documents per row: {max_docs}")
+
+    # Chronological 50/50 split (first half train, second half test)
+    split_idx = int(len(df_merged) * 0.5)
+    train_indices = np.arange(split_idx)
+    test_indices = np.arange(split_idx, len(df_merged))
+    
+    df_train = df_merged.iloc[train_indices].copy()
+    df_test = df_merged.iloc[test_indices].copy()
+
+    # Train CCA projection if requested (only on training dates - chronologically)
+    cca_projection = None
+    if use_cca:
+        if embedding_cache is None:
+            raise ValueError("embedding_cache is required when use_cca=True")
+        
+        max_train_date = df_train['date'].max()
+        train_dates_set = set(df_train['date'].values)
+        
+        if verbose:
+            print(f"Debug: Total embedding_cache size: {len(embedding_cache)}")
+            print(f"Debug: Training dates in df_train: {len(train_dates_set)}")
+            print(f"Debug: Max train date: {max_train_date}")
+            cache_dates = sorted(embedding_cache.keys())
+            print(f"Debug: Cache date range: {cache_dates[0] if cache_dates else 'empty'} to {cache_dates[-1] if cache_dates else 'empty'}")
+        
+        train_cache = {date: emb for date, emb in embedding_cache.items() if date <= max_train_date}
+        
+        if verbose:
+            print(f"Debug: Dates in train_cache (after filtering by max_train_date): {len(train_cache)}")
+            train_cache_dates = sorted(train_cache.keys())
+            if train_cache_dates:
+                print(f"Debug: Train cache date range: {train_cache_dates[0]} to {train_cache_dates[-1]}")
+        
+        assert len(train_cache) >= 2, f"Not enough dates in training cache for CCA: {len(train_cache)} dates (need at least 2). Total cache: {len(embedding_cache)}, train dates: {len(train_dates_set)}, max_train_date: {max_train_date}"
+        
+        cca_projection = train_cca_projection(train_cache, n_components=cca_components, verbose=verbose)
+        if verbose:
+            print(f"Using CCA projection: {cca_components} components")
+
     # Aggregate embeddings for each row
     if verbose:
-        print("Aggregating embeddings with EMA...")
+        if use_cca:
+            print("Concatenating CCA-projected embeddings...")
+        else:
+            print("Concatenating embeddings...")
 
     aggregated_embeddings = []
     for _, row in df_merged.iterrows():
-        emb = aggregate_embeddings(row['doc_embeddings'], method='ema')
+        emb = aggregate_embeddings(row['doc_embeddings'], method='concat', max_docs=max_docs, projection=cca_projection)
         aggregated_embeddings.append(emb)
 
-    X = np.stack(aggregated_embeddings, axis=0)  # shape: (n_samples, 512)
+    X = np.stack(aggregated_embeddings, axis=0)
     y = df_merged['target'].values
 
     if verbose:
         print(f"Feature matrix shape: {X.shape}")
         print(f"Target shape: {y.shape}")
-
-    # Chronological 50/50 split (first half train, second half test)
-    split_idx = int(len(X) * 0.5)
-    train_indices = np.arange(split_idx)
-    test_indices = np.arange(split_idx, len(X))
 
     X_train, X_test = X[train_indices], X[test_indices]
     y_train, y_test = y[train_indices], y[test_indices]
@@ -183,14 +316,18 @@ def train_nlp_model(
 
         if model_type == 'bayesian_ridge':
             print(f"Training BayesianRidge model...")
+        elif model_type == 'pls':
+            print(f"Training PLSRegression model (n_components={pls_n_components})...")
         else:
             print(f"Training Ridge model (alpha={ridge_alpha})...")
 
     # Train model
     if model_type == 'bayesian_ridge':
-        model = BayesianRidge()
+        model = BayesianRidge(fit_intercept=False)
     elif model_type == 'ridge':
-        model = Ridge(alpha=ridge_alpha, random_state=42)
+        model = Ridge(alpha=ridge_alpha, random_state=42, fit_intercept=False)
+    elif model_type == 'pls':
+        model = PLSRegression(n_components=pls_n_components, scale=False)
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
@@ -233,6 +370,7 @@ def train_nlp_model(
         'model': model,
         'model_type': model_type,
         'ridge_alpha': ridge_alpha if model_type == 'ridge' else None,
+        'pls_n_components': pls_n_components if model_type == 'pls' else None,
         'full_predictions': full_predictions,
         'train_pred': y_train_pred,
         'test_pred': y_test_pred,
@@ -285,7 +423,7 @@ def print_nlp_results(results_list):
     print("\n" + "="*80)
     print("STAGE 1: NLP MODEL RESULTS")
     print("="*80)
-    print(f"\nInput: 512-dim aggregated embeddings (EMA with half-life=5)")
+    print(f"\nInput: Concatenated embeddings (all documents per row)")
     print(f"Train/Test split: 50/50 chronological (first half train, second half test)")
 
     table = Table(show_header=True, header_style="bold magenta", title="\nPerformance Metrics")
@@ -318,30 +456,44 @@ if __name__ == "__main__":
 
     # Load data
     print("\n1. Loading documents...")
-    df_nlp = create_nlp_dataset(n_months=6, min_before=12, max_before=24)
+    df_nlp = create_nlp_dataset(n_months=6, min_before=10, max_before=18)
 
     print("\n2. Loading regression data...")
     df_regression = reconstruct_model_data()
 
     # Generate embeddings (only once, reuse for all models)
     print("\n3. Generating embeddings...")
-    df_nlp = embed_documents(df_nlp, verbose=True)
+    df_nlp, embedding_cache = embed_documents(df_nlp, verbose=True)
 
     # Train multiple models
     print("\n4. Training NLP models...")
 
     models_to_test = [
+        ('Ridge α=1e-2', {'model_type': 'ridge', 'ridge_alpha': 1e-2}),
+        ('Ridge α=1e-1', {'model_type': 'ridge', 'ridge_alpha': 1e-1}),
         ('Ridge α=1', {'model_type': 'ridge', 'ridge_alpha': 1.0}),
         ('Ridge α=10', {'model_type': 'ridge', 'ridge_alpha': 10.0}),
-        ('Ridge α=50', {'model_type': 'ridge', 'ridge_alpha': 50.0}),
         ('Ridge α=200', {'model_type': 'ridge', 'ridge_alpha': 200.0}),
-        ('BayesianRidge', {'model_type': 'bayesian_ridge'}),
+        ('Ridge α=1e8', {'model_type': 'ridge', 'ridge_alpha': 1e8}),
+        # ('BayesianRidge', {'model_type': 'bayesian_ridge'}),
+        ('PLS k=1', {'model_type': 'pls', 'pls_n_components': 1}),
+        ('PLS k=2', {'model_type': 'pls', 'pls_n_components': 2}),
+        ('PLS k=3', {'model_type': 'pls', 'pls_n_components': 3}),
+        ('Ridge+CCA k=1', {'model_type': 'ridge', 'ridge_alpha': 1e4, 'use_cca': True, 'cca_components': 1}),
+        ('Ridge+CCA k=2', {'model_type': 'ridge', 'ridge_alpha': 1e4, 'use_cca': True, 'cca_components': 2}),
+        ('Ridge+CCA k=3', {'model_type': 'ridge', 'ridge_alpha': 1e4, 'use_cca': True, 'cca_components': 3}),
+        ('Ridge+CCA k=4', {'model_type': 'ridge', 'ridge_alpha': 1e4, 'use_cca': True, 'cca_components': 4}),
+        ('Ridge+CCA k=5', {'model_type': 'ridge', 'ridge_alpha': 1e4, 'use_cca': True, 'cca_components': 5}),
+        ('Ridge+CCA k=6', {'model_type': 'ridge', 'ridge_alpha': 1e4, 'use_cca': True, 'cca_components': 6}),
+        ('PLS k=1+CCA k=50', {'model_type': 'pls', 'pls_n_components': 1, 'use_cca': True, 'cca_components': 1}),
+        ('PLS k=2+CCA k=50', {'model_type': 'pls', 'pls_n_components': 1, 'use_cca': True, 'cca_components': 2}),
+        ('PLS k=3+CCA k=50', {'model_type': 'pls', 'pls_n_components': 1, 'use_cca': True, 'cca_components': 3}),
     ]
 
     results_list = []
     for name, params in models_to_test:
         print(f"\nTraining {name}...")
-        result = train_nlp_model(df_nlp, df_regression, verbose=False, **params)
+        result = train_nlp_model(df_nlp, df_regression, embedding_cache=embedding_cache, verbose=False, **params)
         results_list.append((name, result))
 
     # Print comparison
