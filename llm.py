@@ -44,10 +44,13 @@ def translate(text):
 
 def translate_all():
     mapping = []
-    for input_file in glob("parsed/bol*.txt"):
-        digits = os.path.basename(input_file).split(".")[0].split("bol")[1]
+    for input_file in glob("parsed/*.txt"):
+        lower = os.path.basename(input_file).lower()
+        if "bol" not in lower:
+            continue
+        digits = lower.split(".")[0].split("bol")[1]
         month = digits[:2]
-        year = digits[2:]
+        year = digits[2:4]
         output_file = f"translated/{year}_{month}.md"
         mapping.append((input_file, output_file))
     mapping.sort(key=lambda x: x[1])
