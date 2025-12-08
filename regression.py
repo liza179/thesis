@@ -329,12 +329,12 @@ if __name__ == "__main__":
         results = train_model(df, **params)
         results_list.append((name, results))
 
-    print("\nModel Coefficients:")
-    for model_name, model_results in results_list:
-        print(f"\n{model_name}:")
-        for feat, coef in model_results['coefficients'].items():
-            print(f"  {feat:30s}: {coef:10.6f}")
-    print()
+    # print("\nModel Coefficients:")
+    # for model_name, model_results in results_list:
+    #     print(f"\n{model_name}:")
+    #     for feat, coef in model_results['coefficients'].items():
+    #         print(f"  {feat:30s}: {coef:10.6f}")
+    # print()
 
     table = Table(show_header=True, header_style="bold magenta", title="Model Comparison")
     table.add_column("Model", style="cyan")
