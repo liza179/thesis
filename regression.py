@@ -2,12 +2,12 @@ import pandas as pd
 import numpy as np
 from statsmodels.tsa.filters.hp_filter import hpfilter
 from sklearn.linear_model import BayesianRidge, Lasso, Ridge
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, PowerTransformer, QuantileTransformer
+from bayesian_quantile_transformer import BayesianQuantileTransformer
 from sklearn.metrics import r2_score
 from scipy.stats import pearsonr, spearmanr
 from rich.console import Console
 from rich.table import Table
-
 def reconstruct_model_data(input_csv='merged_data.csv', start_date='2016-01-31', hp_lambda=14400, horizon=12):
     df = pd.read_csv(input_csv, parse_dates=['date'])
     df = df.sort_values('date').reset_index(drop=True)
@@ -41,40 +41,62 @@ def reconstruct_model_data(input_csv='merged_data.csv', start_date='2016-01-31',
             df_filtered[col] = df_filtered[col].bfill()
 
     final_cols = ['date', 'cpi_yoy', 'target', 'cpi_log_return_1_months', 'cpi_log_return_6_months', 'cpi_log_return_12_months', 'rem_1_months', 'rem_6_months', 'rem_12_months']
-    
+
+    target = df_filtered['target']
+    print(target.head())
+    print(target.tail())
+    for q in [1, 2, 3, 4, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]:
+        print(f"Q{q}: {np.percentile(target, q)}")
+
     return df_filtered[final_cols]
 
 
+
+
+def gaussian_rank_correlation(x, y):
+    """
+    Compute Gaussian rank correlation (Spearman's rho computed via normal scores).
+    Both x and y are transformed to normal distributions, then Pearson correlation is computed.
+    This is robust to outliers and captures monotonic relationships.
+    """
+    x = np.asarray(x).reshape(-1, 1)
+    y = np.asarray(y).reshape(-1, 1)
+
+    x_transformed = BayesianQuantileTransformer().fit_transform(x).ravel()
+    y_transformed = BayesianQuantileTransformer().fit_transform(y).ravel()
+
+    return pearsonr(x_transformed, y_transformed)[0]
 
 
 def bootstrap_metrics(y_true, y_pred, n_bootstrap=300, random_state=42):
     rng = np.random.RandomState(random_state)
     n = len(y_true)
     r2_samples = []
-    pearson_samples = []
-    spearman_samples = []
+    gauss_corr_samples = []
 
     for _ in range(n_bootstrap):
         indices = rng.choice(n, size=n, replace=True)
         y_true_boot = y_true.iloc[indices]
         y_pred_boot = y_pred.iloc[indices]
         r2_samples.append(r2_score(y_true_boot, y_pred_boot))
-        pearson_samples.append(pearsonr(y_true_boot, y_pred_boot)[0])
-        spearman_samples.append(spearmanr(y_true_boot, y_pred_boot)[0])
+        gauss_corr_samples.append(gaussian_rank_correlation(y_true_boot, y_pred_boot))
 
     return {
         'r2_ci_low': np.percentile(r2_samples, 2.5),
         'r2_ci_high': np.percentile(r2_samples, 97.5),
-        'pearson_ci_low': np.percentile(pearson_samples, 2.5),
-        'pearson_ci_high': np.percentile(pearson_samples, 97.5),
-        'spearman_ci_low': np.percentile(spearman_samples, 2.5),
-        'spearman_ci_high': np.percentile(spearman_samples, 97.5),
+        'gauss_corr_ci_low': np.percentile(gauss_corr_samples, 2.5),
+        'gauss_corr_ci_high': np.percentile(gauss_corr_samples, 97.5),
     }
 
 
-def train_model(df, model_type='bayesian_ridge'):
+def train_model(df, model_type='bayesian_ridge', clip_x_percentiles=None, clip_y_percentiles=None, clip_y_absolute=None, feature_transform='standard', ridge_alpha=200.0, lasso_alpha=0.01):
     feature_cols = ['cpi_log_return_1_months', 'cpi_log_return_6_months', 'cpi_log_return_12_months', 'rem_1_months', 'rem_6_months', 'rem_12_months']
     df_clean = df.dropna(subset=feature_cols + ['target']).copy()
+
+    if clip_x_percentiles:
+        for col in feature_cols:
+            p_low, p_high = np.percentile(df_clean[col], clip_x_percentiles)
+            df_clean[col] = df_clean[col].clip(p_low, p_high)
 
     X = df_clean[feature_cols]
     y = df_clean['target']
@@ -83,20 +105,37 @@ def train_model(df, model_type='bayesian_ridge'):
     X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
 
-    scaler = StandardScaler()
+    # Clip y_train if requested
+    if clip_y_absolute is not None:
+        y_low, y_high = clip_y_absolute
+        y_train_clipped = y_train.clip(y_low, y_high)
+    elif clip_y_percentiles:
+        y_low, y_high = np.percentile(y_train, clip_y_percentiles)
+        y_train_clipped = y_train.clip(y_low, y_high)
+    else:
+        y_train_clipped = y_train
+
+    # Apply feature transformation
+    if feature_transform == 'standard':
+        scaler = StandardScaler()
+    elif feature_transform == 'bayesian_quantile':
+        scaler = BayesianQuantileTransformer()
+    else:
+        raise ValueError(f"Unknown feature_transform: {feature_transform}")
+
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
     if model_type == 'lasso':
-        model = Lasso(alpha=0.1, max_iter=10000, random_state=42)
+        model = Lasso(alpha=lasso_alpha, max_iter=10000, random_state=42)
     elif model_type == 'ridge':
-        model = Ridge(alpha=0.1, random_state=42)
+        model = Ridge(alpha=ridge_alpha, random_state=42)
     elif model_type == 'bayesian_ridge':
         model = BayesianRidge()
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
-    model.fit(X_train_scaled, y_train)
+    model.fit(X_train_scaled, y_train_clipped)
 
     y_train_pred = model.predict(X_train_scaled)
     y_test_pred = model.predict(X_test_scaled)
@@ -106,10 +145,8 @@ def train_model(df, model_type='bayesian_ridge'):
 
     train_r2 = r2_score(y_train, y_train_pred)
     test_r2 = r2_score(y_test, y_test_pred)
-    train_pearson = pearsonr(y_train, y_train_pred)[0]
-    test_pearson = pearsonr(y_test, y_test_pred)[0]
-    train_spearman = spearmanr(y_train, y_train_pred)[0]
-    test_spearman = spearmanr(y_test, y_test_pred)[0]
+    train_gauss_corr = gaussian_rank_correlation(y_train, y_train_pred)
+    test_gauss_corr = gaussian_rank_correlation(y_test, y_test_pred)
 
     train_bootstrap = bootstrap_metrics(y_train, y_train_pred)
     test_bootstrap = bootstrap_metrics(y_test, y_test_pred)
@@ -117,10 +154,8 @@ def train_model(df, model_type='bayesian_ridge'):
     result = {
         'train_r2': train_r2,
         'test_r2': test_r2,
-        'train_pearson': train_pearson,
-        'test_pearson': test_pearson,
-        'train_spearman': train_spearman,
-        'test_spearman': test_spearman,
+        'train_gauss_corr': train_gauss_corr,
+        'test_gauss_corr': test_gauss_corr,
         'train_bootstrap': train_bootstrap,
         'test_bootstrap': test_bootstrap,
         'model': model,
@@ -153,17 +188,98 @@ if __name__ == "__main__":
         ('rem_12_months', 'log(rem_12)[t-12] - log(cpi_yoy)[t-12]'),
     ]
     for feat, desc in features:
-        print(f"  {feat:20s}: {desc}")
+        print(f"  {feat:30s}: {desc}")
 
-    print("\nModel: LassoCV with StandardScaler")
-    print("Split: 50/50 chronological (first half train, second half test)")
+    print("\n" + "="*80)
+    print("FEATURE TRANSFORMATION ANALYSIS")
     print("="*80)
-    print("\n")
+    print()
 
+    feature_cols = ['cpi_log_return_1_months', 'cpi_log_return_6_months', 'cpi_log_return_12_months',
+                    'rem_1_months', 'rem_6_months', 'rem_12_months']
+    df_clean = df.dropna(subset=feature_cols + ['target']).copy()
+    y = df_clean['target'].values
+
+    table = Table(title="Feature Transformation Correlations (Gaussian rank correlation)",
+                  show_header=True, header_style="bold magenta")
+    table.add_column("Feature", style="cyan")
+    table.add_column("Raw", justify="right")
+    table.add_column("Clip 1%", justify="right")
+    table.add_column("Clip 2%", justify="right")
+    table.add_column("Clip 3%", justify="right")
+    table.add_column("BayesQuant", justify="right")
+    table.add_column("Power", justify="right")
+    table.add_column("Best", style="green", justify="right")
+
+    for feat in feature_cols:
+        X_raw = df_clean[feat].values
+
+        # Raw
+        corr_raw = abs(gaussian_rank_correlation(X_raw, y))
+
+        # Clip 1%
+        p1, p99 = np.percentile(X_raw, [1, 99])
+        X_clip1 = X_raw.clip(p1, p99)
+        corr_clip1 = abs(gaussian_rank_correlation(X_clip1, y))
+
+        # Clip 2%
+        p2, p98 = np.percentile(X_raw, [2, 98])
+        X_clip2 = X_raw.clip(p2, p98)
+        corr_clip2 = abs(gaussian_rank_correlation(X_clip2, y))
+
+        # Clip 3%
+        p3, p97 = np.percentile(X_raw, [3, 97])
+        X_clip3 = X_raw.clip(p3, p97)
+        corr_clip3 = abs(gaussian_rank_correlation(X_clip3, y))
+
+        # BayesianQuantile
+        try:
+            X_bayes = BayesianQuantileTransformer().fit_transform(X_raw.reshape(-1, 1)).ravel()
+            corr_bayes = abs(gaussian_rank_correlation(X_bayes, y))
+        except:
+            corr_bayes = 0.0
+
+        # PowerTransformer
+        try:
+            X_power = PowerTransformer(method='yeo-johnson').fit_transform(X_raw.reshape(-1, 1)).ravel()
+            corr_power = abs(gaussian_rank_correlation(X_power, y))
+        except:
+            corr_power = 0.0
+
+        correlations = {
+            'Raw': corr_raw,
+            'Clip 1%': corr_clip1,
+            'Clip 2%': corr_clip2,
+            'Clip 3%': corr_clip3,
+            'BayesQuant': corr_bayes,
+            'Power': corr_power
+        }
+
+        best_transform = max(correlations, key=correlations.get)
+
+        table.add_row(
+            feat,
+            f"{corr_raw:.4f}",
+            f"{corr_clip1:.4f}",
+            f"{corr_clip2:.4f}",
+            f"{corr_clip3:.4f}",
+            f"{corr_bayes:.4f}",
+            f"{corr_power:.4f}",
+            best_transform
+        )
+
+    console.print(table)
+
+    print("\n" + "="*80)
+    print("MODEL TRAINING")
+    print("="*80)
+    print("Split: 50/50 chronological (first half train, second half test)")
+    print()
+
+    # Final models: Ridge(α=200) and Lasso(α=0.02) with BayesQuant
     ablations = [
-        ('BayesianRidge', {'model_type': 'bayesian_ridge'}),
-        ('Ridge (alpha=0.1)', {'model_type': 'ridge'}),
-        ('Lasso (alpha=0.1)', {'model_type': 'lasso'}),
+        ('Ridge α=200 + BayesQuant', {'model_type': 'ridge', 'feature_transform': 'bayesian_quantile', 'ridge_alpha': 200.0}),
+        ('Lasso α=0.02 + BayesQuant', {'model_type': 'lasso', 'feature_transform': 'bayesian_quantile', 'lasso_alpha': 0.02}),
     ]
 
     results_list = []
@@ -171,35 +287,25 @@ if __name__ == "__main__":
         results = train_model(df, **params)
         results_list.append((name, results))
 
-    print("="*80)
-    print("MODEL COEFFICIENTS")
-    print("="*80)
-    for name, results in results_list:
-        print(f"\n{name}:")
-        if 'lasso_alpha' in results:
-            print(f"  Alpha: {results['lasso_alpha']:.6f}")
-        print("  Feature coefficients:")
-        for feat, coef in results['coefficients'].items():
-            print(f"    {feat:25s}: {coef:10.6f}")
-    print("\n")
+    print("\nModel Coefficients (BayesianRidge):")
+    br_results = results_list[0][1]
+    for feat, coef in br_results['coefficients'].items():
+        print(f"  {feat:30s}: {coef:10.6f}")
+    print()
 
     table = Table(show_header=True, header_style="bold magenta", title="Model Comparison")
     table.add_column("Model", style="cyan")
     table.add_column("Train R²", justify="right")
     table.add_column("Test R²", justify="right")
-    table.add_column("Train Pearson", justify="right")
-    table.add_column("Test Pearson", justify="right")
-    table.add_column("Train Spearman", justify="right")
-    table.add_column("Test Spearman", justify="right")
+    table.add_column("Train Gauss Corr", justify="right")
+    table.add_column("Test Gauss Corr", justify="right")
 
     for name, res in results_list:
         train_r2_ci = f"{res['train_r2']:.3f} [{res['train_bootstrap']['r2_ci_low']:.3f}, {res['train_bootstrap']['r2_ci_high']:.3f}]"
         test_r2_ci = f"{res['test_r2']:.3f} [{res['test_bootstrap']['r2_ci_low']:.3f}, {res['test_bootstrap']['r2_ci_high']:.3f}]"
-        train_pearson_ci = f"{res['train_pearson']:.3f} [{res['train_bootstrap']['pearson_ci_low']:.3f}, {res['train_bootstrap']['pearson_ci_high']:.3f}]"
-        test_pearson_ci = f"{res['test_pearson']:.3f} [{res['test_bootstrap']['pearson_ci_low']:.3f}, {res['test_bootstrap']['pearson_ci_high']:.3f}]"
-        train_spearman_ci = f"{res['train_spearman']:.3f} [{res['train_bootstrap']['spearman_ci_low']:.3f}, {res['train_bootstrap']['spearman_ci_high']:.3f}]"
-        test_spearman_ci = f"{res['test_spearman']:.3f} [{res['test_bootstrap']['spearman_ci_low']:.3f}, {res['test_bootstrap']['spearman_ci_high']:.3f}]"
+        train_gauss_ci = f"{res['train_gauss_corr']:.3f} [{res['train_bootstrap']['gauss_corr_ci_low']:.3f}, {res['train_bootstrap']['gauss_corr_ci_high']:.3f}]"
+        test_gauss_ci = f"{res['test_gauss_corr']:.3f} [{res['test_bootstrap']['gauss_corr_ci_low']:.3f}, {res['test_bootstrap']['gauss_corr_ci_high']:.3f}]"
 
-        table.add_row(name, train_r2_ci, test_r2_ci, train_pearson_ci, test_pearson_ci, train_spearman_ci, test_spearman_ci)
+        table.add_row(name, train_r2_ci, test_r2_ci, train_gauss_ci, test_gauss_ci)
 
     console.print(table)
