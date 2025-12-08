@@ -12,9 +12,9 @@ def main():
     print("NLP Dataset Creation Demo")
     print("=" * 70)
 
-    # Create dataset with 6 months lookback, offset=1 (exclude current month)
-    print("\n1. Creating NLP dataset (n_months=6, offset=1)...")
-    df_nlp = create_nlp_dataset(n_months=6, offset=1)
+    # Create dataset with 6 months lookback, min_before=12, max_before=24
+    print("\n1. Creating NLP dataset (n_months=6, min_before=12, max_before=24)...")
+    df_nlp = create_nlp_dataset(n_months=6, min_before=12, max_before=24)
 
     # Show sample rows
     print("\n2. Sample rows with good document coverage:")
