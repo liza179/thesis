@@ -1,3 +1,6 @@
 monthly_reports
 parsed
 monthly.zip
+.env
+__pycache__
+*.zip

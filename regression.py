@@ -2,9 +2,13 @@ import pandas as pd
 import numpy as np
 from statsmodels.tsa.filters.hp_filter import hpfilter
 from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, PowerTransformer, QuantileTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+from scipy.stats import pearsonr, spearmanr
+from bayesian_quantile_transformer import BayesianQuantileTransformer
+from rich.console import Console
+from rich.table import Table
 
 def reconstruct_model_data(input_csv='merged_data.csv', start_date='2016-01-31', hp_lambda=14400):
     df = pd.read_csv(input_csv, parse_dates=['date'])
@@ -129,82 +133,152 @@ def analyze_features(df, target='cpi_log_return'):
         print("No high correlations found")
 
 
-def train_ridge_regression(df, target='cpi_log_return', alpha=1.0, test_size=0.2, random_state=42, clip_percentiles=(2, 98)):
+def bootstrap_metrics(y_true, y_pred, n_bootstrap=1000, random_state=42):
+    rng = np.random.RandomState(random_state)
+    n = len(y_true)
+
+    r2_samples = []
+    corr_samples = []
+
+    for _ in range(n_bootstrap):
+        indices = rng.choice(n, size=n, replace=True)
+        y_true_boot = y_true.iloc[indices] if hasattr(y_true, 'iloc') else y_true[indices]
+        y_pred_boot = y_pred.iloc[indices] if hasattr(y_pred, 'iloc') else y_pred[indices]
+
+        r2_samples.append(r2_score(y_true_boot, y_pred_boot))
+        corr_samples.append(pearsonr(y_true_boot, y_pred_boot)[0])
+
+    r2_samples = np.array(r2_samples)
+    corr_samples = np.array(corr_samples)
+
+    return {
+        'r2_mean': np.mean(r2_samples),
+        'r2_ci_low': np.percentile(r2_samples, 2.5),
+        'r2_ci_high': np.percentile(r2_samples, 97.5),
+        'corr_mean': np.mean(corr_samples),
+        'corr_ci_low': np.percentile(corr_samples, 2.5),
+        'corr_ci_high': np.percentile(corr_samples, 97.5),
+    }
+
+
+def train_ridge(df, alpha=10.0, target='cpi_log_return', test_size=0.2, random_state=42,
+                clip_x_percentiles=(2, 98), clip_y_percentiles=(10, 90), clip_residuals=False,
+                transformer='standard', n_bootstrap=1000):
     feature_cols = [col for col in df.columns if col not in ['date', target, 'cpi_yoy', 'cpi_yoy_raw',
                     'policy_rate_raw', 'market_rate_raw', 'rem_12_raw', 'emae_index']]
 
     df_clean = df.dropna(subset=feature_cols + [target]).copy()
 
-    for col in feature_cols:
-        p_low, p_high = np.percentile(df_clean[col], clip_percentiles)
-        df_clean[col] = df_clean[col].clip(p_low, p_high)
+    if clip_x_percentiles:
+        for col in feature_cols:
+            p_low, p_high = np.percentile(df_clean[col], clip_x_percentiles)
+            df_clean[col] = df_clean[col].clip(p_low, p_high)
 
     X = df_clean[feature_cols]
     y = df_clean[target]
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state)
 
-    scaler = StandardScaler()
+    if clip_y_percentiles:
+        y_train_low, y_train_high = np.percentile(y_train, clip_y_percentiles)
+        y_train_clipped = y_train.clip(y_train_low, y_train_high)
+    else:
+        y_train_clipped = y_train
+        y_train_low, y_train_high = y_train.min(), y_train.max()
+
+    if transformer == 'standard':
+        scaler = StandardScaler()
+    elif transformer == 'power':
+        scaler = PowerTransformer(method='yeo-johnson', standardize=True)
+    elif transformer == 'quantile_normal':
+        scaler = QuantileTransformer(output_distribution='normal', random_state=random_state)
+    elif transformer == 'bayesian_quantile':
+        scaler = BayesianQuantileTransformer()
+    else:
+        raise ValueError(f"Unknown transformer: {transformer}")
+
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
     model = Ridge(alpha=alpha)
-    model.fit(X_train_scaled, y_train)
+    model.fit(X_train_scaled, y_train_clipped)
 
-    y_train_pred = model.predict(X_train_scaled)
-    y_test_pred = model.predict(X_test_scaled)
+    y_train_pred_raw = model.predict(X_train_scaled)
+    y_test_pred_raw = model.predict(X_test_scaled)
 
-    train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
-    test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
-    train_mae = mean_absolute_error(y_train, y_train_pred)
-    test_mae = mean_absolute_error(y_test, y_test_pred)
+    if clip_residuals:
+        train_residuals = y_train - y_train_pred_raw
+        res_low, res_high = np.percentile(train_residuals, clip_y_percentiles if clip_y_percentiles else [5, 95])
+        y_train_pred = y_train_pred_raw + train_residuals.clip(res_low, res_high)
+        test_residuals_raw = y_test_pred_raw - y_train.mean()
+        y_test_pred = y_test_pred_raw + test_residuals_raw.clip(res_low, res_high) - test_residuals_raw
+    else:
+        y_train_pred = y_train_pred_raw.clip(y_train_low, y_train_high)
+        y_test_pred = y_test_pred_raw.clip(y_train_low, y_train_high)
+
     train_r2 = r2_score(y_train, y_train_pred)
     test_r2 = r2_score(y_test, y_test_pred)
 
-    results = {
-        'model': model,
-        'scaler': scaler,
-        'feature_cols': feature_cols,
-        'train_rmse': train_rmse,
-        'test_rmse': test_rmse,
-        'train_mae': train_mae,
-        'test_mae': test_mae,
+    train_pearson = pearsonr(y_train, y_train_pred)[0]
+    test_pearson = pearsonr(y_test, y_test_pred)[0]
+    train_spearman = spearmanr(y_train, y_train_pred)[0]
+    test_spearman = spearmanr(y_test, y_test_pred)[0]
+
+    train_bootstrap = bootstrap_metrics(y_train, y_train_pred, n_bootstrap, random_state)
+    test_bootstrap = bootstrap_metrics(y_test, y_test_pred, n_bootstrap, random_state)
+
+    return {
         'train_r2': train_r2,
         'test_r2': test_r2,
-        'n_train': len(X_train),
-        'n_test': len(X_test),
-        'coefficients': dict(zip(feature_cols, model.coef_))
+        'train_pearson': train_pearson,
+        'test_pearson': test_pearson,
+        'train_spearman': train_spearman,
+        'test_spearman': test_spearman,
+        'train_bootstrap': train_bootstrap,
+        'test_bootstrap': test_bootstrap,
     }
-
-    return results
 
 
 if __name__ == "__main__":
     df = reconstruct_model_data()
-    print(f"Data shape: {df.shape}\n")
 
-    analyze_features(df)
+    console = Console()
 
-    print("\n\n")
-    results = train_ridge_regression(df, alpha=10.0)
+    ablations = [
+        ('Full model', {'transformer': 'bayesian_quantile', 'alpha': 10.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': (10, 90)}),
+        ('→ Sklearn quantile', {'transformer': 'quantile_normal', 'alpha': 10.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': (10, 90)}),
+        ('→ No quantile', {'transformer': 'standard', 'alpha': 10.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': (10, 90)}),
+        ('→ Lower alpha (1.0)', {'transformer': 'bayesian_quantile', 'alpha': 1.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': (10, 90)}),
+        ('→ No y clipping', {'transformer': 'bayesian_quantile', 'alpha': 10.0, 'clip_x_percentiles': (2, 98), 'clip_y_percentiles': None}),
+        ('→ No x clipping', {'transformer': 'bayesian_quantile', 'alpha': 10.0, 'clip_x_percentiles': None, 'clip_y_percentiles': (10, 90)}),
+    ]
 
-    print("="*80)
-    print("RIDGE REGRESSION RESULTS")
-    print("="*80)
-    print(f"Target: cpi_log_return")
-    print(f"Alpha: 1.0")
-    print(f"\nTrain samples: {results['n_train']}")
-    print(f"Test samples:  {results['n_test']}")
-    print(f"\nTrain RMSE: {results['train_rmse']:.6f}")
-    print(f"Test RMSE:  {results['test_rmse']:.6f}")
-    print(f"\nTrain MAE: {results['train_mae']:.6f}")
-    print(f"Test MAE:  {results['test_mae']:.6f}")
-    print(f"\nTrain R²: {results['train_r2']:.6f}")
-    print(f"Test R²:  {results['test_r2']:.6f}")
+    results_list = []
+    for name, params in ablations:
+        if params['clip_x_percentiles'] is None:
+            results = train_ridge(df, **{k: v for k, v in params.items() if k != 'clip_x_percentiles'})
+        else:
+            results = train_ridge(df, **params)
+        results_list.append((name, results))
 
-    print("\n" + "="*80)
-    print("COEFFICIENTS")
-    print("="*80)
-    coef_sorted = sorted(results['coefficients'].items(), key=lambda x: abs(x[1]), reverse=True)
-    for feat, coef in coef_sorted:
-        print(f"{feat:25s}: {coef:10.6f}")
+    table = Table(title="Ablation Study", show_header=True, header_style="bold magenta")
+    table.add_column("Configuration", style="cyan", width=20)
+    table.add_column("Train R²", justify="right")
+    table.add_column("Test R²", justify="right")
+    table.add_column("Train Pearson", justify="right")
+    table.add_column("Test Pearson", justify="right")
+    table.add_column("Train Spearman", justify="right")
+    table.add_column("Test Spearman", justify="right")
+
+    for name, res in results_list:
+        table.add_row(
+            name,
+            f"{res['train_r2']:.4f}",
+            f"{res['test_r2']:.4f}",
+            f"{res['train_pearson']:.4f}",
+            f"{res['test_pearson']:.4f}",
+            f"{res['train_spearman']:.4f}",
+            f"{res['test_spearman']:.4f}",
+        )
+
+    console.print(table)

@@ -10,7 +10,10 @@ dependencies = [
     "langchain-text-splitters>=1.0.0",
     "loguru>=0.7.3",
     "model2vec>=0.7.0",
+    "pandas>=2.3.3",
     "pypdf>=6.3.0",
+    "scikit-learn>=1.7.2",
     "sentence-transformers>=5.1.2",
+    "statsmodels>=0.14.6",
     "tqdm>=4.67.1",
 ]
