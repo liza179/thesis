@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from statsmodels.tsa.filters.hp_filter import hpfilter
-from sklearn.linear_model import Ridge, BayesianRidge
+from sklearn.linear_model import Ridge, BayesianRidge, LassoCV
 from sklearn.preprocessing import StandardScaler, PowerTransformer, QuantileTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
@@ -48,13 +48,12 @@ def reconstruct_model_data(input_csv='merged_data.csv', start_date='2016-01-31',
 
     df_filtered = df[df['date'] >= start_date].copy().reset_index(drop=True)
     df_filtered['cpi_log_return'] = df_filtered['cpi_yoy'].diff()
+    df_filtered['cpi_log_return_lag1'] = df_filtered['cpi_log_return'].shift(1)
 
     column_order = [
-        'date', 'cpi_yoy', 'cpi_log_return',
-        'rate_spread', 'd_rate_spread',
+        'date', 'cpi_yoy', 'cpi_log_return', 'cpi_log_return_lag1',
         'rem_cpi_ratio',
-        'gap', 'd_gap', 'gap_trend', 'd_gap_trend',
-        'd_fx_log',
+        'd_gap_trend',
         'emae_index', 'cpi_yoy_raw', 'policy_rate_raw', 'market_rate_raw', 'rem_12_raw'
     ]
 
@@ -161,13 +160,19 @@ def bootstrap_metrics(y_true, y_pred, n_bootstrap=1000, random_state=42):
     }
 
 
-def train_model(df, model_type='ridge', alpha=10.0, target='cpi_log_return', test_size=0.2, random_state=42,
-                clip_y_percentiles=(10, 90), clip_residuals=False,
-                transformer='standard', target_transformer=None, n_bootstrap=1000):
+def train_model(df, model_type='ridge', alpha=10.0, target='cpi_log_return', test_size=0.5, random_state=42,
+                clip_y_percentiles=None, clip_residuals=False, clip_x_percentiles=None,
+                transformer='standard', target_transformer=None, n_bootstrap=300, per_feature_transform=None,
+                lasso_alphas=None):
     feature_cols = [col for col in df.columns if col not in ['date', target, 'cpi_yoy', 'cpi_yoy_raw',
                     'policy_rate_raw', 'market_rate_raw', 'rem_12_raw', 'emae_index']]
 
     df_clean = df.dropna(subset=feature_cols + [target]).copy()
+
+    if clip_x_percentiles:
+        for col in feature_cols:
+            p_low, p_high = np.percentile(df_clean[col], clip_x_percentiles)
+            df_clean[col] = df_clean[col].clip(p_low, p_high)
 
     X = df_clean[feature_cols]
     y = df_clean[target]
@@ -181,19 +186,37 @@ def train_model(df, model_type='ridge', alpha=10.0, target='cpi_log_return', tes
         y_train_clipped = y_train
         y_train_low, y_train_high = y_train.min(), y_train.max()
 
-    if transformer == 'standard':
-        scaler = StandardScaler()
-    elif transformer == 'power':
-        scaler = PowerTransformer(method='yeo-johnson', standardize=True)
-    elif transformer == 'quantile_normal':
-        scaler = QuantileTransformer(output_distribution='normal', random_state=random_state)
-    elif transformer == 'bayesian_quantile':
-        scaler = BayesianQuantileTransformer()
+    if per_feature_transform:
+        X_train_scaled = np.zeros_like(X_train)
+        X_test_scaled = np.zeros_like(X_test)
+        for i, feat in enumerate(feature_cols):
+            trans_type = per_feature_transform.get(feat, 'standard')
+            if trans_type == 'standard':
+                scaler_feat = StandardScaler()
+            elif trans_type == 'power':
+                scaler_feat = PowerTransformer(method='yeo-johnson', standardize=True)
+            elif trans_type == 'bayesian_quantile':
+                scaler_feat = BayesianQuantileTransformer()
+            elif trans_type == 'raw':
+                scaler_feat = StandardScaler()
+            else:
+                raise ValueError(f"Unknown transformer: {trans_type}")
+            X_train_scaled[:, i] = scaler_feat.fit_transform(X_train.iloc[:, i].values.reshape(-1, 1)).ravel()
+            X_test_scaled[:, i] = scaler_feat.transform(X_test.iloc[:, i].values.reshape(-1, 1)).ravel()
     else:
-        raise ValueError(f"Unknown transformer: {transformer}")
+        if transformer == 'standard':
+            scaler = StandardScaler()
+        elif transformer == 'power':
+            scaler = PowerTransformer(method='yeo-johnson', standardize=True)
+        elif transformer == 'quantile_normal':
+            scaler = QuantileTransformer(output_distribution='normal', random_state=random_state)
+        elif transformer == 'bayesian_quantile':
+            scaler = BayesianQuantileTransformer()
+        else:
+            raise ValueError(f"Unknown transformer: {transformer}")
 
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
 
     if target_transformer == 'bayesian_quantile':
         y_scaler = BayesianQuantileTransformer()
@@ -209,6 +232,10 @@ def train_model(df, model_type='ridge', alpha=10.0, target='cpi_log_return', tes
         model = Ridge(alpha=alpha)
     elif model_type == 'bayesian_ridge':
         model = BayesianRidge()
+    elif model_type == 'lasso_cv':
+        if lasso_alphas is None:
+            lasso_alphas = np.logspace(-4, 1, 50)
+        model = LassoCV(alphas=lasso_alphas, cv=5, random_state=random_state, max_iter=10000)
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
@@ -242,7 +269,7 @@ def train_model(df, model_type='ridge', alpha=10.0, target='cpi_log_return', tes
     train_bootstrap = bootstrap_metrics(y_train, y_train_pred, n_bootstrap, random_state)
     test_bootstrap = bootstrap_metrics(y_test, y_test_pred, n_bootstrap, random_state)
 
-    return {
+    result = {
         'train_r2': train_r2,
         'test_r2': test_r2,
         'train_pearson': train_pearson,
@@ -251,19 +278,107 @@ def train_model(df, model_type='ridge', alpha=10.0, target='cpi_log_return', tes
         'test_spearman': test_spearman,
         'train_bootstrap': train_bootstrap,
         'test_bootstrap': test_bootstrap,
+        'model': model,
     }
+
+    if model_type == 'lasso_cv':
+        result['lasso_alpha'] = model.alpha_
+        result['lasso_coefs'] = dict(zip(feature_cols, model.coef_))
+
+    return result
 
 
 if __name__ == "__main__":
     df = reconstruct_model_data()
-
     console = Console()
 
+    feature_cols = [col for col in df.columns if col not in ['date', 'cpi_log_return', 'cpi_yoy', 'cpi_yoy_raw',
+                    'policy_rate_raw', 'market_rate_raw', 'rem_12_raw', 'emae_index']]
+
+    df_clean = df.dropna(subset=feature_cols + ['cpi_log_return']).copy()
+    y = df_clean['cpi_log_return']
+    y_low, y_high = np.percentile(y, [10, 90])
+    y_clipped = y.clip(y_low, y_high)
+
+    table = Table(title="Feature Transformation Correlations (with 10-90 clipped target)", show_header=True, header_style="bold magenta")
+    table.add_column("Feature", style="cyan", width=20)
+    table.add_column("Raw", justify="right")
+    table.add_column("BayesQuant", justify="right")
+    table.add_column("Quant(norm)", justify="right")
+    table.add_column("Quant(uni)", justify="right")
+    table.add_column("Power", justify="right")
+    table.add_column("Best", style="green", justify="right")
+
+    for feat in feature_cols:
+        X_raw = df_clean[feat].values.reshape(-1, 1)
+
+        corr_raw = abs(pearsonr(X_raw.ravel(), y_clipped)[0])
+
+        X_bayes = BayesianQuantileTransformer().fit_transform(X_raw).ravel()
+        corr_bayes = abs(pearsonr(X_bayes, y_clipped)[0])
+
+        X_qnorm = QuantileTransformer(output_distribution='normal').fit_transform(X_raw).ravel()
+        corr_qnorm = abs(pearsonr(X_qnorm, y_clipped)[0])
+
+        X_quni = QuantileTransformer(output_distribution='uniform').fit_transform(X_raw).ravel()
+        corr_quni = abs(pearsonr(X_quni, y_clipped)[0])
+
+        try:
+            X_power = PowerTransformer(method='yeo-johnson').fit_transform(X_raw).ravel()
+            corr_power = abs(pearsonr(X_power, y_clipped)[0])
+        except:
+            corr_power = 0.0
+
+        correlations = {
+            'Raw': corr_raw,
+            'BayesQuant': corr_bayes,
+            'Quant(norm)': corr_qnorm,
+            'Quant(uni)': corr_quni,
+            'Power': corr_power
+        }
+
+        best_transform = max(correlations, key=correlations.get)
+
+        table.add_row(
+            feat,
+            f"{corr_raw:.4f}",
+            f"{corr_bayes:.4f}",
+            f"{corr_qnorm:.4f}",
+            f"{corr_quni:.4f}",
+            f"{corr_power:.4f}",
+            best_transform
+        )
+
+    console.print(table)
+
+    print("\n")
+    print("="*80)
+    print("MODEL SPECIFICATION")
+    print("="*80)
+    print("\nTarget: cpi_log_return = diff(log(cpi_yoy))")
+    print("        Monthly CPI inflation log-return\n")
+
+    print("Features:")
+    feature_descriptions = {
+        'cpi_log_return_lag1': ('lag(cpi_log_return)', 'StandardScaler'),
+        'rem_cpi_ratio': ('log(rem_12) - log(cpi_yoy_lag1)', 'StandardScaler'),
+        'd_gap_trend': ('diff(gap_trend)', 'StandardScaler'),
+    }
+
+    for feat, (desc, trans) in feature_descriptions.items():
+        print(f"  {feat:20s}: {desc:45s} [{trans}]")
+
+    print("\nModel: LassoCV with StandardScaler")
+    print("Split: 50/50 train/test")
+    print("="*80)
+    print("\n")
+
     ablations = [
-        ('Full model', {'model_type': 'bayesian_ridge', 'transformer': 'bayesian_quantile', 'clip_y_percentiles': (10, 90)}),
-        ('→ Ridge (α=1e-6)', {'model_type': 'ridge', 'transformer': 'bayesian_quantile', 'alpha': 1e-6, 'clip_y_percentiles': (10, 90)}),
-        ('→ No quantile', {'model_type': 'bayesian_ridge', 'transformer': 'standard', 'clip_y_percentiles': (10, 90)}),
-        ('→ No y clipping', {'model_type': 'bayesian_ridge', 'transformer': 'bayesian_quantile', 'clip_y_percentiles': None}),
+        ('Full model', {'model_type': 'lasso_cv', 'transformer': 'standard'}),
+        ('→ BayesianRidge', {'model_type': 'bayesian_ridge', 'transformer': 'standard'}),
+        ('→ X-clip 1%', {'model_type': 'lasso_cv', 'transformer': 'standard', 'clip_x_percentiles': (1, 99)}),
+        ('→ X-clip 2%', {'model_type': 'lasso_cv', 'transformer': 'standard', 'clip_x_percentiles': (2, 98)}),
+        ('→ X-clip 3%', {'model_type': 'lasso_cv', 'transformer': 'standard', 'clip_x_percentiles': (3, 97)}),
     ]
 
     results_list = []
@@ -271,24 +386,33 @@ if __name__ == "__main__":
         results = train_model(df, **params)
         results_list.append((name, results))
 
-    table = Table(title="Ablation Study", show_header=True, header_style="bold magenta")
-    table.add_column("Configuration", style="cyan", width=20)
-    table.add_column("Train R²", justify="right")
-    table.add_column("Test R²", justify="right")
-    table.add_column("Train Pearson", justify="right")
-    table.add_column("Test Pearson", justify="right")
-    table.add_column("Train Spearman", justify="right")
-    table.add_column("Test Spearman", justify="right")
+    full_model_results = results_list[0][1]
+    if 'lasso_alpha' in full_model_results:
+        print(f"LassoCV selected alpha: {full_model_results['lasso_alpha']:.6f}\n")
+        print("Feature coefficients:")
+        for feat, coef in full_model_results['lasso_coefs'].items():
+            if abs(coef) > 1e-10:
+                print(f"  {feat:20s}: {coef:10.6f}")
+            else:
+                print(f"  {feat:20s}: {coef:10.6f}  (zeroed)")
+        print("\n")
+
+    table2 = Table(title="Ablation Study", show_header=True, header_style="bold magenta")
+    table2.add_column("Configuration", style="cyan", width=20)
+    table2.add_column("Train R² [95% CI]", justify="right", width=25)
+    table2.add_column("Test R² [95% CI]", justify="right", width=25)
+    table2.add_column("Test Pearson [95% CI]", justify="right", width=25)
 
     for name, res in results_list:
-        table.add_row(
+        train_r2_ci = f"{res['train_r2']:.3f} [{res['train_bootstrap']['r2_ci_low']:.3f}, {res['train_bootstrap']['r2_ci_high']:.3f}]"
+        test_r2_ci = f"{res['test_r2']:.3f} [{res['test_bootstrap']['r2_ci_low']:.3f}, {res['test_bootstrap']['r2_ci_high']:.3f}]"
+        test_pearson_ci = f"{res['test_pearson']:.3f} [{res['test_bootstrap']['corr_ci_low']:.3f}, {res['test_bootstrap']['corr_ci_high']:.3f}]"
+
+        table2.add_row(
             name,
-            f"{res['train_r2']:.4f}",
-            f"{res['test_r2']:.4f}",
-            f"{res['train_pearson']:.4f}",
-            f"{res['test_pearson']:.4f}",
-            f"{res['train_spearman']:.4f}",
-            f"{res['test_spearman']:.4f}",
+            train_r2_ci,
+            test_r2_ci,
+            test_pearson_ci,
         )
 
-    console.print(table)
+    console.print(table2)
