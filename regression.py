@@ -8,7 +8,8 @@ from sklearn.metrics import r2_score
 from scipy.stats import pearsonr, spearmanr
 from rich.console import Console
 from rich.table import Table
-def reconstruct_model_data(input_csv='merged_data.csv', start_date='2016-01-31', hp_lambda=14400, horizon=12):
+
+def reconstruct_model_data(input_csv='merged_data.csv', start_date='2016-01-31', hp_lambda=14400, horizon=6):
     df = pd.read_csv(input_csv, parse_dates=['date'])
     df = df.sort_values('date').reset_index(drop=True)
 
@@ -89,9 +90,16 @@ def bootstrap_metrics(y_true, y_pred, n_bootstrap=300, random_state=42):
     }
 
 
-def train_model(df, model_type='bayesian_ridge', clip_x_percentiles=None, clip_y_percentiles=None, clip_y_absolute=None, feature_transform='standard', ridge_alpha=200.0, lasso_alpha=0.01):
-    feature_cols = ['cpi_log_return_1_months', 'cpi_log_return_6_months', 'cpi_log_return_12_months', 'rem_1_months', 'rem_6_months', 'rem_12_months']
-    df_clean = df.dropna(subset=feature_cols + ['target']).copy()
+def train_model(df, model_type='bayesian_ridge', clip_x_percentiles=None, clip_y_percentiles=None, clip_y_absolute=None, feature_transform='standard', ridge_alpha=200.0, lasso_alpha=0.01, feature_subset=None, transform_y=False):
+    all_feature_cols = ['cpi_log_return_1_months', 'cpi_log_return_6_months', 'cpi_log_return_12_months', 'rem_1_months', 'rem_6_months', 'rem_12_months']
+
+    # Use feature subset if specified, otherwise use all features
+    if feature_subset is not None:
+        feature_cols = feature_subset
+    else:
+        feature_cols = all_feature_cols
+
+    df_clean = df.dropna(subset=all_feature_cols + ['target']).copy()
 
     if clip_x_percentiles:
         for col in feature_cols:
@@ -101,9 +109,15 @@ def train_model(df, model_type='bayesian_ridge', clip_x_percentiles=None, clip_y
     X = df_clean[feature_cols]
     y = df_clean['target']
 
+    # Random 50/50 split to avoid temporal distribution shift
+    np.random.seed(42)
+    indices = np.random.permutation(len(X))
     split_idx = int(len(X) * 0.5)
-    X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
-    y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
+    train_indices = indices[:split_idx]
+    test_indices = indices[split_idx:]
+
+    X_train, X_test = X.iloc[train_indices], X.iloc[test_indices]
+    y_train, y_test = y.iloc[train_indices], y.iloc[test_indices]
 
     # Clip y_train if requested
     if clip_y_absolute is not None:
@@ -114,6 +128,14 @@ def train_model(df, model_type='bayesian_ridge', clip_x_percentiles=None, clip_y
         y_train_clipped = y_train.clip(y_low, y_high)
     else:
         y_train_clipped = y_train
+
+    # Optionally transform y_train to Gaussian (for optimizing Gaussian correlation)
+    if transform_y:
+        y_scaler = BayesianQuantileTransformer()
+        y_train_transformed = y_scaler.fit_transform(y_train_clipped.values.reshape(-1, 1)).ravel()
+        y_train_for_fitting = y_train_transformed
+    else:
+        y_train_for_fitting = y_train_clipped
 
     # Apply feature transformation
     if feature_transform == 'standard':
@@ -135,7 +157,7 @@ def train_model(df, model_type='bayesian_ridge', clip_x_percentiles=None, clip_y
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
-    model.fit(X_train_scaled, y_train_clipped)
+    model.fit(X_train_scaled, y_train_for_fitting)
 
     y_train_pred = model.predict(X_train_scaled)
     y_test_pred = model.predict(X_test_scaled)
@@ -160,6 +182,7 @@ def train_model(df, model_type='bayesian_ridge', clip_x_percentiles=None, clip_y
         'test_bootstrap': test_bootstrap,
         'model': model,
         'coefficients': dict(zip(feature_cols, model.coef_)),
+        'feature_cols': feature_cols,
     }
 
     if model_type == 'lasso_cv':
@@ -273,13 +296,32 @@ if __name__ == "__main__":
     print("\n" + "="*80)
     print("MODEL TRAINING")
     print("="*80)
-    print("Split: 50/50 chronological (first half train, second half test)")
+    print("Split: 50/50 random (seed=42)")
     print()
 
-    # Final models: Ridge(α=200) and Lasso(α=0.02) with BayesQuant
+    # Economically sensible baselines and models
     ablations = [
-        ('Ridge α=200 + BayesQuant', {'model_type': 'ridge', 'feature_transform': 'bayesian_quantile', 'ridge_alpha': 200.0}),
-        ('Lasso α=0.02 + BayesQuant', {'model_type': 'lasso', 'feature_transform': 'bayesian_quantile', 'lasso_alpha': 0.02}),
+        # Baseline 1: Pure expectations (forward-looking)
+        ('Expectations [rem_1]', {'model_type': 'ridge', 'feature_transform': 'bayesian_quantile', 'ridge_alpha': 200.0, 'feature_subset': ['rem_1_months']}),
+
+        # Baseline 2: Pure momentum (backward-looking)
+        ('Momentum [cpi_1]', {'model_type': 'ridge', 'feature_transform': 'bayesian_quantile', 'ridge_alpha': 200.0, 'feature_subset': ['cpi_log_return_1_months']}),
+
+        # Baseline 3: All CPI lags (pure AR model)
+        ('AR model (CPI lags only)', {'model_type': 'ridge', 'feature_transform': 'bayesian_quantile', 'ridge_alpha': 200.0, 'feature_subset': ['cpi_log_return_1_months', 'cpi_log_return_6_months', 'cpi_log_return_12_months']}),
+
+        # Baseline 4: All REM lags (pure expectations)
+        ('Expectations (REM lags)', {'model_type': 'ridge', 'feature_transform': 'bayesian_quantile', 'ridge_alpha': 200.0, 'feature_subset': ['rem_1_months', 'rem_6_months', 'rem_12_months']}),
+
+        # Ridge models with different regularization strengths
+        ('Ridge α=100 (weak reg)', {'model_type': 'ridge', 'feature_transform': 'bayesian_quantile', 'ridge_alpha': 100.0}),
+        ('Ridge α=200 (baseline)', {'model_type': 'ridge', 'feature_transform': 'bayesian_quantile', 'ridge_alpha': 200.0}),
+        ('Ridge α=400 (strong reg)', {'model_type': 'ridge', 'feature_transform': 'bayesian_quantile', 'ridge_alpha': 400.0}),
+
+        # Lasso models with different regularization strengths
+        ('Lasso α=0.01 (weak reg)', {'model_type': 'lasso', 'feature_transform': 'bayesian_quantile', 'lasso_alpha': 0.01}),
+        ('Lasso α=0.02 (baseline)', {'model_type': 'lasso', 'feature_transform': 'bayesian_quantile', 'lasso_alpha': 0.02}),
+        ('Lasso α=0.04 (strong reg)', {'model_type': 'lasso', 'feature_transform': 'bayesian_quantile', 'lasso_alpha': 0.04}),
     ]
 
     results_list = []
@@ -287,10 +329,11 @@ if __name__ == "__main__":
         results = train_model(df, **params)
         results_list.append((name, results))
 
-    print("\nModel Coefficients (BayesianRidge):")
-    br_results = results_list[0][1]
-    for feat, coef in br_results['coefficients'].items():
-        print(f"  {feat:30s}: {coef:10.6f}")
+    print("\nModel Coefficients:")
+    for model_name, model_results in results_list:
+        print(f"\n{model_name}:")
+        for feat, coef in model_results['coefficients'].items():
+            print(f"  {feat:30s}: {coef:10.6f}")
     print()
 
     table = Table(show_header=True, header_style="bold magenta", title="Model Comparison")
