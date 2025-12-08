@@ -1,8 +1,8 @@
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.models import StaticEmbedding
 from tokenizers import Tokenizer
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 import numpy as np
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 def get_model(static=False):
     if static:
